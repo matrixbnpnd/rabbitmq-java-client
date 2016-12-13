@@ -27,7 +27,7 @@ public class VaryingScenarioStats implements ScenarioStats {
     public VaryingScenarioStats() {}
 
     public SimpleScenarioStats next(List<VariableValue> value) {
-        SimpleScenarioStats stats = new SimpleScenarioStats(1000L);
+        SimpleScenarioStats stats = new SimpleScenarioStats(1000L, 1000L);
         keys.add(value);
         this.stats.put(value, stats);
         return stats;

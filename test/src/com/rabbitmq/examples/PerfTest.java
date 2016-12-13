@@ -48,6 +48,7 @@ public class PerfTest {
             String exchangeName      = strArg(cmd, 'e', exchangeType);
             String queueName         = strArg(cmd, 'u', "");
             String routingKey        = strArg(cmd, 'k', null);
+            String headerMatchMode   = strArg(cmd, 'J', null);
             boolean randomRoutingKey = cmd.hasOption('K');
             int samplingInterval     = intArg(cmd, 'i', 1);
             float producerRateLimit  = floatArg(cmd, 'r', 0.0f);
@@ -57,7 +58,10 @@ public class PerfTest {
             int producerTxSize       = intArg(cmd, 'm', 0);
             int consumerTxSize       = intArg(cmd, 'n', 0);
             long confirm             = intArg(cmd, 'c', -1);
+            long latencyLimitation   = intArg(cmd, 'l', 0);
             boolean autoAck          = cmd.hasOption('a');
+            boolean explicitAck      = !cmd.hasOption('o');
+            boolean autoDelete       = cmd.hasOption('d');
             int multiAckEvery        = intArg(cmd, 'A', 0);
             int channelPrefetch      = intArg(cmd, 'Q', 0);
             int consumerPrefetch     = intArg(cmd, 'q', 0);
@@ -66,30 +70,38 @@ public class PerfTest {
             int producerMsgCount     = intArg(cmd, 'C', 0);
             int consumerMsgCount     = intArg(cmd, 'D', 0);
             List<?> flags            = lstArg(cmd, 'f');
+            List<?> headerKeyPairs   = lstArg(cmd, 'j');
             int frameMax             = intArg(cmd, 'M', 0);
             int heartbeat            = intArg(cmd, 'b', 0);
             boolean predeclared      = cmd.hasOption('p');
 
-            String uri               = strArg(cmd, 'h', "amqp://localhost");
+            String puri               = strArg(cmd, 'h', "amqp://localhost");
+            String curi               = strArg(cmd, 'H', "amqp://localhost");
 
             //setup
-            PrintlnStats stats = new PrintlnStats(1000L * samplingInterval,
+            PrintlnStats stats = new PrintlnStats(1000L * samplingInterval, 1000L * latencyLimitation,
                                     producerCount > 0,
                                     consumerCount > 0,
                                     (flags.contains("mandatory") ||
                                      flags.contains("immediate")),
                                     confirm != -1);
 
-            ConnectionFactory factory = new ConnectionFactory();
-            factory.setShutdownTimeout(0); // So we still shut down even with slow consumers
-            factory.setUri(uri);
-            factory.setRequestedFrameMax(frameMax);
-            factory.setRequestedHeartbeat(heartbeat);
+            ConnectionFactory cfactory = new ConnectionFactory();
+            cfactory.setShutdownTimeout(0); // So we still shut down even with slow consumers
+            cfactory.setUri(curi);
+            cfactory.setRequestedFrameMax(frameMax);
+            cfactory.setRequestedHeartbeat(heartbeat);
 
+            ConnectionFactory pfactory = new ConnectionFactory();
+            pfactory.setShutdownTimeout(0); // So we still shut down even with slow consumers
+            pfactory.setUri(puri);
+            pfactory.setRequestedFrameMax(frameMax);
+            pfactory.setRequestedHeartbeat(heartbeat);
 
             MulticastParams p = new MulticastParams();
             p.setAutoAck(          autoAck);
-            p.setAutoDelete(       true);
+            p.setExplicitAck( explicitAck );
+            p.setAutoDelete(       autoDelete);
             p.setConfirm(          confirm);
             p.setConsumerCount(    consumerCount);
             p.setConsumerMsgCount( consumerMsgCount);
@@ -97,7 +109,9 @@ public class PerfTest {
             p.setConsumerTxSize(   consumerTxSize);
             p.setExchangeName(     exchangeName);
             p.setExchangeType(     exchangeType);
+            p.setHeaderMatchMode(headerMatchMode);
             p.setFlags(            flags);
+            p.setHeaderKeyPairs(headerKeyPairs);
             p.setMultiAckEvery(    multiAckEvery);
             p.setMinMsgSize(       minMsgSize);
             p.setPredeclared(      predeclared);
@@ -112,7 +126,7 @@ public class PerfTest {
             p.setProducerRateLimit(producerRateLimit);
             p.setTimeLimit(        timeLimit);
 
-            MulticastSet set = new MulticastSet(stats, factory, p);
+            MulticastSet set = new MulticastSet(stats, cfactory, pfactory, p);
             set.run(true);
 
             stats.printFinal();
@@ -135,7 +149,8 @@ public class PerfTest {
     private static Options getOptions() {
         Options options = new Options();
         options.addOption(new Option("?", "help",             false,"show usage"));
-        options.addOption(new Option("h", "uri",              true, "connection URI"));
+        options.addOption(new Option("h", "puri",              true, "producer connection URI"));
+        options.addOption(new Option("H", "curi",              true, "consumer connection URI"));
         options.addOption(new Option("t", "type",             true, "exchange type"));
         options.addOption(new Option("e", "exchange",         true, "exchange name"));
         options.addOption(new Option("u", "queue",            true, "queue name"));
@@ -149,7 +164,10 @@ public class PerfTest {
         options.addOption(new Option("m", "ptxsize",          true, "producer tx size"));
         options.addOption(new Option("n", "ctxsize",          true, "consumer tx size"));
         options.addOption(new Option("c", "confirm",          true, "max unconfirmed publishes"));
+        options.addOption(new Option("l", "latencyLimitation",true, "latencyLimitation"));
         options.addOption(new Option("a", "autoack",          false,"auto ack"));
+        options.addOption(new Option("d", "autoDelete",       false, "auto delete"));
+        options.addOption(new Option("o", "explicitAck",         false, "Not send explicit ack"));
         options.addOption(new Option("A", "multiAckEvery",    true, "multi ack every"));
         options.addOption(new Option("q", "qos",              true, "consumer prefetch count"));
         options.addOption(new Option("Q", "globalQos",        true, "channel prefetch count"));
@@ -163,6 +181,8 @@ public class PerfTest {
         options.addOption(new Option("M", "framemax",         true, "frame max"));
         options.addOption(new Option("b", "heartbeat",        true, "heartbeat interval"));
         options.addOption(new Option("p", "predeclared",      false,"allow use of predeclared objects"));
+        options.addOption(new Option("J", "matchMode",        true, "headers match mode"));
+        options.addOption(new Option("j", "matchKeyPair",        true, "headers match key pair"));
         return options;
     }
 
@@ -179,7 +199,7 @@ public class PerfTest {
     }
 
     private static List<?> lstArg(CommandLine cmd, char opt) {
-        String[] vals = cmd.getOptionValues('f');
+        String[] vals = cmd.getOptionValues(opt);
         if (vals == null) {
             vals = new String[] {};
         }
@@ -192,10 +212,10 @@ public class PerfTest {
         private final boolean returnStatsEnabled;
         private final boolean confirmStatsEnabled;
 
-        public PrintlnStats(long interval,
+        public PrintlnStats(long interval, long latencyLimitation,
                             boolean sendStatsEnabled, boolean recvStatsEnabled,
                             boolean returnStatsEnabled, boolean confirmStatsEnabled) {
-            super(interval);
+            super(interval, latencyLimitation);
             this.sendStatsEnabled = sendStatsEnabled;
             this.recvStatsEnabled = recvStatsEnabled;
             this.returnStatsEnabled = returnStatsEnabled;
@@ -216,9 +236,11 @@ public class PerfTest {
                               ", min/avg/max latency: " +
                               minLatency/1000L + "/" +
                               cumulativeLatencyInterval / (1000L * latencyCountInterval) + "/" +
-                              maxLatency/1000L + " microseconds" :
+                              maxLatency/1000L + " ms" :
                               ""));
-
+            if (recvStatsEnabled) {
+                System.out.print("latency lower than " + latencyLimitation / 1000L + "ms is " + acceptableLatencyCountInterval + ", " + recvCountInterval + " percent " + acceptableLatencyCountInterval * 100 / recvCountInterval + "%, average percent" + acceptableLatencyCountTotal * 100 / recvCountTotal);
+            }
             System.out.println();
         }
 

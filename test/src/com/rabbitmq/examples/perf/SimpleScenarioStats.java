@@ -27,8 +27,8 @@ class SimpleScenarioStats extends Stats implements ScenarioStats {
     private long elapsedTotalToIgnore;
     private long minMsgSize;
 
-    public SimpleScenarioStats(long interval) {
-        super(interval);
+    public SimpleScenarioStats(long interval, long latencyLimitation) {
+        super(interval, latencyLimitation);
     }
 
     protected void report(long now) {

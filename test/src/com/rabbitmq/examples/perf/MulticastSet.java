@@ -26,10 +26,11 @@ import java.util.concurrent.TimeoutException;
 public class MulticastSet {
     private final String id;
     private final Stats stats;
-    private final ConnectionFactory factory;
+    private final ConnectionFactory cfactory;
+    private final ConnectionFactory pfactory;
     private final MulticastParams params;
 
-    public MulticastSet(Stats stats, ConnectionFactory factory,
+    public MulticastSet(Stats stats, ConnectionFactory cfactory, ConnectionFactory pfactory,
                         MulticastParams params) {
         if (params.getRoutingKey() == null) {
             this.id = UUID.randomUUID().toString();
@@ -37,7 +38,8 @@ public class MulticastSet {
             this.id = params.getRoutingKey();
         }
         this.stats = stats;
-        this.factory = factory;
+        this.cfactory = cfactory;
+        this.pfactory = pfactory;
         this.params = params;
     }
 
@@ -52,14 +54,14 @@ public class MulticastSet {
             if (announceStartup) {
                 System.out.println("starting consumer #" + i);
             }
-            Connection conn = factory.newConnection();
+            Connection conn = cfactory.newConnection();
             consumerConnections[i] = conn;
             Thread t = new Thread(params.createConsumer(conn, stats, id));
             consumerThreads[i] = t;
         }
 
         if (params.shouldConfigureQueue()) {
-            Connection conn = factory.newConnection();
+            Connection conn = cfactory.newConnection();
             params.configureQueue(conn, id);
             conn.close();
         }
@@ -70,7 +72,7 @@ public class MulticastSet {
             if (announceStartup) {
                 System.out.println("starting producer #" + i);
             }
-            Connection conn = factory.newConnection();
+            Connection conn = pfactory.newConnection();
             producerConnections[i] = conn;
             Thread t = new Thread(params.createProducer(conn, stats, id));
             producerThreads[i] = t;

@@ -37,11 +37,16 @@ public abstract class Stats {
     protected long    cumulativeLatencyInterval;
     protected long    cumulativeLatencyTotal;
 
+    protected long    latencyLimitation;
+    protected long    acceptableLatencyCountInterval;
+    protected long    acceptableLatencyCountTotal;
+
     protected long    elapsedInterval;
     protected long    elapsedTotal;
 
-    public Stats(long interval) {
+    public Stats(long interval, long latencyLimitation) {
         this.interval = interval;
+		this.latencyLimitation = latencyLimitation; // nanoseconds
         startTime = System.currentTimeMillis();
         reset(startTime);
     }
@@ -59,6 +64,7 @@ public abstract class Stats {
         maxLatency                = Long.MIN_VALUE;
         latencyCountInterval      = 0;
         cumulativeLatencyInterval = 0L;
+        acceptableLatencyCountInterval    = 0L;
     }
 
     private void report() {
@@ -105,6 +111,11 @@ public abstract class Stats {
             cumulativeLatencyTotal += latency;
             latencyCountInterval++;
             latencyCountTotal++;
+
+            if (latency < latencyLimitation) {
+                acceptableLatencyCountInterval++;
+                acceptableLatencyCountTotal++;
+            }
         }
         report();
     }

@@ -15,17 +15,14 @@
 
 package com.rabbitmq.examples.perf;
 
-import com.rabbitmq.client.AMQP;
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.ShutdownSignalException;
+import com.rabbitmq.client.*;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class MulticastParams {
     private long confirm = -1;
+    private long latencyLimitation = 0;
     private int consumerCount = 1;
     private int producerCount = 1;
     private int consumerTxSize = 0;
@@ -44,6 +41,7 @@ public class MulticastParams {
     private String exchangeType = "direct";
     private String queueName = "";
     private String routingKey = null;
+    private String headerMatchMode = null;
     private boolean randomRoutingKey = false;
 
     private List<?> flags = new ArrayList<Object>();
@@ -51,8 +49,10 @@ public class MulticastParams {
     private int multiAckEvery = 0;
     private boolean autoAck = true;
     private boolean autoDelete = false;
+    private boolean explicitAck = true;
 
     private boolean predeclared;
+    private Map<String, Object> headerSettings = null;
 
     public void setExchangeType(String exchangeType) {
         this.exchangeType = exchangeType;
@@ -68,6 +68,10 @@ public class MulticastParams {
 
     public void setRoutingKey(String routingKey) {
         this.routingKey = routingKey;
+    }
+
+    public void setHeaderMatchMode(String headerMatchMode) {
+        this.headerMatchMode = headerMatchMode;
     }
 
     public void setRandomRoutingKey(boolean randomRoutingKey) {
@@ -102,8 +106,14 @@ public class MulticastParams {
         this.confirm = confirm;
     }
 
+    public void setLatencyLimitation(long latencyLimitation) { this.latencyLimitation = latencyLimitation; }
+
     public void setAutoAck(boolean autoAck) {
         this.autoAck = autoAck;
+    }
+
+    public void setExplicitAck(boolean explicitAck) { 
+        this.explicitAck = explicitAck; 
     }
 
     public void setMultiAckEvery(int multiAckEvery) {
@@ -143,6 +153,19 @@ public class MulticastParams {
         this.flags = flags;
     }
 
+    public void setHeaderKeyPairs(List<?> headerKeyPairs) {
+        this.headerSettings = new HashMap<String, Object>();
+        headerSettings.put("x-match", headerMatchMode);
+        if (!headerKeyPairs.isEmpty()) {
+            Object headerKeyPair = headerKeyPairs.get(0);
+            for (String keyPair : headerKeyPair.toString().split(",")) {
+                String[] s = keyPair.split("=");
+                System.out.println("s0" + s[0] + "s1" + s[1]);
+                headerSettings.put(s[0], s[1]);
+            }
+        }
+    }
+
     public void setAutoDelete(boolean autoDelete) {
         this.autoDelete = autoDelete;
     }
@@ -163,6 +186,8 @@ public class MulticastParams {
         return minMsgSize;
     }
 
+    public long getLatencyLimitation() { return latencyLimitation; }
+
     public String getRoutingKey() {
         return routingKey;
     }
@@ -178,11 +203,15 @@ public class MulticastParams {
         if (!predeclared || !exchangeExists(connection, exchangeName)) {
             channel.exchangeDeclare(exchangeName, exchangeType);
         }
+
+        AMQP.BasicProperties prop = new AMQP.BasicProperties(null, null, headerSettings,
+                flags.contains("persistent") ? 2 : null, null, null, null, null, null, null, null, null, null, null);
+
         final Producer producer = new Producer(channel, exchangeName, id,
                                                randomRoutingKey, flags, producerTxSize,
                                                producerRateLimit, producerMsgCount,
                                                minMsgSize, timeLimit,
-                                               confirm, stats);
+                                               confirm, stats, prop);
         channel.addReturnListener(producer);
         channel.addConfirmListener(producer);
         return producer;
@@ -195,7 +224,7 @@ public class MulticastParams {
         if (consumerPrefetch > 0) channel.basicQos(consumerPrefetch);
         if (channelPrefetch > 0) channel.basicQos(channelPrefetch, true);
         return new Consumer(channel, id, qName,
-                                         consumerTxSize, autoAck, multiAckEvery,
+                                         consumerTxSize, autoAck, explicitAck, multiAckEvery,
                                          stats, consumerRateLimit, consumerMsgCount, timeLimit);
     }
 
@@ -215,7 +244,11 @@ public class MulticastParams {
                                          false, autoDelete,
                                          null).getQueue();
         }
-        channel.queueBind(qName, exchangeName, id);
+        if (exchangeType.equals("headers")) {
+            channel.queueBind(qName, exchangeName, "", headerSettings);
+        } else {
+            channel.queueBind(qName, exchangeName, id);
+        }
         channel.abort();
         return qName;
     }

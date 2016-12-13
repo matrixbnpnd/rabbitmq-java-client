@@ -39,9 +39,9 @@ public class SimpleScenario implements Scenario {
     }
 
     public void run() throws IOException, InterruptedException, TimeoutException {
-        this.stats = new SimpleScenarioStats(interval);
+        this.stats = new SimpleScenarioStats(interval, 1000L);
         for (MulticastParams p : params) {
-            MulticastSet set = new MulticastSet(stats, factory, p);
+            MulticastSet set = new MulticastSet(stats, factory, factory, p);
             stats.setup(p);
             set.run();
         }

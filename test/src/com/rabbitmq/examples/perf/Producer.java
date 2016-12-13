@@ -44,7 +44,7 @@ public class Producer extends ProducerConsumerBase implements Runnable, ReturnLi
     private final int     txSize;
     private final int     msgLimit;
     private final long    timeLimit;
-
+    private AMQP.BasicProperties prop;
     private final Stats   stats;
 
     private final byte[]  message;
@@ -56,7 +56,7 @@ public class Producer extends ProducerConsumerBase implements Runnable, ReturnLi
     public Producer(Channel channel, String exchangeName, String id, boolean randomRoutingKey,
                     List<?> flags, int txSize,
                     float rateLimit, int msgLimit, int minMsgSize, int timeLimit,
-                    long confirm, Stats stats)
+                    long confirm, Stats stats, AMQP.BasicProperties prop)
         throws IOException {
 
         this.channel          = channel;
@@ -75,6 +75,7 @@ public class Producer extends ProducerConsumerBase implements Runnable, ReturnLi
             this.confirmPool  = new Semaphore((int)confirm);
         }
         this.stats        = stats;
+        this.prop = prop;
     }
 
     public void handleReturn(int replyCode,
@@ -159,9 +160,15 @@ public class Producer extends ProducerConsumerBase implements Runnable, ReturnLi
 
         unconfirmedSet.add(channel.getNextPublishSeqNo());
         channel.basicPublish(exchangeName, randomRoutingKey ? UUID.randomUUID().toString() : id,
-                             mandatory, immediate,
-                             persistent ? MessageProperties.MINIMAL_PERSISTENT_BASIC : MessageProperties.MINIMAL_BASIC,
-                             msg);
+                mandatory, immediate,
+                prop,
+                msg);
+
+
+//        channel.basicPublish(exchangeName, randomRoutingKey ? UUID.randomUUID().toString() : id,
+//                             mandatory, immediate,
+//                             persistent ? MessageProperties.MINIMAL_PERSISTENT_BASIC : MessageProperties.MINIMAL_BASIC,
+//                             msg);
     }
 
     private byte[] createMessage(int sequenceNumber)

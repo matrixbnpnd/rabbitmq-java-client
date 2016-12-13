@@ -35,6 +35,7 @@ public class Consumer extends ProducerConsumerBase implements Runnable {
     private final String           queueName;
     private final int              txSize;
     private final boolean          autoAck;
+    private final boolean          explicitAck;
     private final int              multiAckEvery;
     private final Stats stats;
     private final int              msgLimit;
@@ -42,7 +43,7 @@ public class Consumer extends ProducerConsumerBase implements Runnable {
     private final CountDownLatch   latch = new CountDownLatch(1);
 
     public Consumer(Channel channel, String id,
-                    String queueName, int txSize, boolean autoAck,
+                    String queueName, int txSize, boolean autoAck, boolean explicitAck,
                     int multiAckEvery, Stats stats, float rateLimit, int msgLimit, int timeLimit) {
 
         this.channel       = channel;
@@ -51,6 +52,7 @@ public class Consumer extends ProducerConsumerBase implements Runnable {
         this.rateLimit     = rateLimit;
         this.txSize        = txSize;
         this.autoAck       = autoAck;
+        this.explicitAck   = explicitAck;
         this.multiAckEvery = multiAckEvery;
         this.stats         = stats;
         this.msgLimit      = msgLimit;
@@ -98,12 +100,17 @@ public class Consumer extends ProducerConsumerBase implements Runnable {
                 long msgNano = d.readLong();
                 long nano = System.nanoTime();
 
-                if (!autoAck) {
+                if (!autoAck && explicitAck) {
                     if (multiAckEvery == 0) {
                         channel.basicAck(envelope.getDeliveryTag(), false);
                     } else if (totalMsgCount % multiAckEvery == 0) {
                         channel.basicAck(envelope.getDeliveryTag(), true);
                     }
+                }
+
+                if (!explicitAck) {
+                    channel.basicReject(envelope.getDeliveryTag(), false);
+//                    channel.basicNack(envelope.getDeliveryTag(), false, true);
                 }
 
                 if (txSize != 0 && totalMsgCount % txSize == 0) {
